@@ -130,6 +130,9 @@
   /* ── MUSIC BTN ── */
   #music-btn{position:fixed;top:18px;right:18px;z-index:999;background:var(--crimson);border:none;color:#fff;padding:10px 14px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .3s;box-shadow:0 4px 12px rgba(0,0,0,.15)}
   #music-btn:hover{background:var(--gold)}
+  #music-btn.pending{animation:music-pulse 1.4s ease-out infinite}
+  @keyframes music-pulse{0%{box-shadow:0 0 0 0 rgba(232,82,26,.6)}100%{box-shadow:0 0 0 16px rgba(232,82,26,0)}}
+  @media(prefers-reduced-motion:reduce){#music-btn.pending{animation:none}}
   #music-btn .note{font-size:18px;animation:bounce 1.2s infinite alternate}
   @keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-4px)}}
 
@@ -612,24 +615,45 @@
 <script>
   var curtainOpened = false;
   var musicPending = false;
+  function setMusicPending(on) {
+    musicPending = on;
+    document.getElementById('music-btn').classList.toggle('pending', on);
+  }
   function startMusic() {
     var audio = document.getElementById('bg-music');
     var note = document.getElementById('music-note');
     note.textContent = '⏸';
     playing = true;
+    setMusicPending(false);
     var p = audio.play();
-    // Browsers block audio without a tap; if so, start it on the guest's first tap
-    if(p) p.catch(function(){ note.textContent = '♪'; playing = false; musicPending = true; });
+    // Browsers block audio until the guest interacts; if so, start it on their first touch
+    if(p) p.catch(function(){ note.textContent = '♪'; playing = false; setMusicPending(true); });
   }
   function openCurtain() {
-    if(curtainOpened) {
-      if(musicPending) { musicPending = false; startMusic(); }
-      return;
-    }
+    if(curtainOpened) return;
     curtainOpened = true;
     document.getElementById('curtain-container').classList.add('open');
     startMusic();
   }
+  // Retry blocked music on any interaction, including scrolling; browsers that allow it will start playing
+  var unlockTrying = false;
+  function unlockMusic(e) {
+    if(!musicPending || unlockTrying) return;
+    if(e && e.target && e.target.closest && e.target.closest('#music-btn')) return; // its own handler plays it
+    unlockTrying = true;
+    var audio = document.getElementById('bg-music');
+    var p = audio.play();
+    var done = function(){ unlockTrying = false; };
+    if(p) p.then(function(){
+      document.getElementById('music-note').textContent = '⏸';
+      playing = true; setMusicPending(false); done();
+    }, done);
+    else done();
+  }
+  ['pointerdown','pointerup','touchstart','touchmove','touchend','click','keydown','wheel'].forEach(function(t){
+    document.addEventListener(t, unlockMusic, {capture:true, passive:true});
+  });
+  window.addEventListener('scroll', unlockMusic, {passive:true});
   // Open automatically if no one taps within 4 seconds
   setTimeout(openCurtain, 4000);
 </script>
@@ -638,7 +662,7 @@
 <button id="music-btn" onclick="toggleMusic();event.stopPropagation()">
   <span class="note" id="music-note">♪</span>
 </button>
-<audio id="bg-music" loop>
+<audio id="bg-music" loop preload="auto">
   <source src="mus.mp3" type="audio/mp3"/>
 </audio>
 
@@ -669,7 +693,7 @@
   <p class="inv-blessing"><strong>With the Divine Blessings of<br/>
     Smt. Sugani Bai &amp; Shri. S. Tejraj ji Jain<br/>
     Smt. Ajab Bai<br/><br/>
-    Manakchand Srisrimal<br/>
+    <span style="font-size:clamp(26px,7vw,32px);font-weight:700">Manakchand Srisrimal</span><br/>
     is delighted to invite you to the wedding<br/>
     celebrations of his granddaughter</strong></p>
   <div class="inv-names">
@@ -883,7 +907,7 @@
   // Music
   var playing=false;
   function toggleMusic(){
-    musicPending=false;
+    setMusicPending(false);
     var audio=document.getElementById('bg-music');
     var note=document.getElementById('music-note');
     if(playing){audio.pause();note.textContent='♪';playing=false;}
